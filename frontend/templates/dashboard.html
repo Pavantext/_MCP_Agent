@@ -169,6 +169,143 @@
             color: #4a5568;
         }
         
+        /* Chatbot Styles */
+        .chatbot-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .chatbot-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .chatbot-title {
+            font-size: 1.5em;
+            color: #333;
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+        
+        .chat-area {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        
+        .chat-messages {
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .user-message {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .bot-message {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 25px;
+            font-size: 0.95em;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+        
+        .send-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .send-btn:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+        
+        .suggestions {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .suggestion-chip {
+            background: #f1f5f9;
+            color: #475569;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .suggestion-chip:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-1px);
+        }
+        
+        .loading-dots {
+            display: inline-block;
+            margin-left: 10px;
+        }
+        
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+        
         .actions {
             text-align: center;
             margin-top: 30px;
@@ -274,6 +411,26 @@
             </div>
         </div>
         
+        <div class="chatbot-container">
+            <div class="chatbot-header">
+                <h2 class="chatbot-title">🤖 Email Assistant</h2>
+            </div>
+            <div class="chat-area">
+                <div class="chat-messages" id="chat-messages">
+                    <div class="message bot-message">
+                        <strong>Email Assistant:</strong> Hi! I'm your personal email assistant. Ask me anything about your emails - I can help you find specific emails, analyze patterns, or answer questions about your inbox. Try asking something like "How many unread emails do I have?" or "Show me emails from a specific sender."
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" class="chat-input" id="chat-input" placeholder="Ask about your emails..." onkeypress="handleChatKeyPress(event)">
+                    <button class="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+                <div class="suggestions" id="suggestions">
+                    <!-- Suggestions will be loaded here -->
+                </div>
+            </div>
+        </div>
+        
         <div class="actions">
             <a href="/emails/all" class="btn btn-primary" target="_blank">📬 View All Emails</a>
             <a href="/emails/unread" class="btn btn-primary" target="_blank">📭 View Unread Only</a>
@@ -309,6 +466,105 @@
         
         // Auto-refresh every 5 minutes
         setInterval(refreshSummary, 300000);
+        
+        // Chatbot functionality
+        let chatMessages = [];
+        
+        // Load suggestions on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSuggestions();
+        });
+        
+        function loadSuggestions() {
+            fetch('/chatbot/suggestions')
+                .then(response => response.json())
+                .then(data => {
+                    const suggestionsContainer = document.getElementById('suggestions');
+                    suggestionsContainer.innerHTML = '';
+                    
+                    data.suggestions.forEach(suggestion => {
+                        const chip = document.createElement('div');
+                        chip.className = 'suggestion-chip';
+                        chip.textContent = suggestion;
+                        chip.onclick = () => {
+                            document.getElementById('chat-input').value = suggestion;
+                            sendMessage();
+                        };
+                        suggestionsContainer.appendChild(chip);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading suggestions:', error);
+                });
+        }
+        
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessage(message, 'user');
+            input.value = '';
+            
+            // Show loading indicator
+            addMessage('Thinking...', 'bot', true);
+            
+            // Send message to API
+            fetch('/chatbot/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading message
+                removeLastBotMessage();
+                
+                // Add bot response
+                addMessage(data.response, 'bot');
+            })
+            .catch(error => {
+                // Remove loading message
+                removeLastBotMessage();
+                
+                // Add error message
+                addMessage('Sorry, I encountered an error. Please try again.', 'bot');
+                console.error('Error:', error);
+            });
+        }
+        
+        function addMessage(content, sender, isLoading = false) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            if (isLoading) {
+                messageDiv.innerHTML = `<strong>Email Assistant:</strong> ${content}<span class="loading-dots"></span>`;
+                messageDiv.id = 'loading-message';
+            } else {
+                messageDiv.innerHTML = content;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function removeLastBotMessage() {
+            const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
     </script>
 </body>
 </html> 

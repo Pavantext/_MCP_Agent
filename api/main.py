@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 import os
 
-from .routers import auth, emails
+from .routers import auth, emails, chatbot
 from .services.email_service import EmailService
 from .services.ai_service import AIService
 from .routers.auth import is_authenticated, tokens
@@ -20,6 +20,7 @@ app = FastAPI(
 # Include routers
 app.include_router(auth.router)
 app.include_router(emails.router)
+app.include_router(chatbot.router)
 
 # Serve static files
 if os.path.exists("frontend/static"):
