@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Summary Dashboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-weight: 400;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        
+        .stat {
+            background: #f8f9fa;
+            padding: 15px 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: 700;
+            color: #667eea;
+            letter-spacing: -0.01em;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+        
+        .summary-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .summary-title {
+            font-size: 1.5em;
+            color: #333;
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            letter-spacing: 0.01em;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .summary-content {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 0.95em;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+            font-weight: 400;
+            color: #2d3748;
+        }
+        
+        .actions {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 25px;
+            margin: 0 10px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.95em;
+            letter-spacing: 0.01em;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-weight: 400;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .stats {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📧 Email Summary Dashboard</h1>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">{{ email_count }}</div>
+                    <div class="stat-label">Unread Emails</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">AI</div>
+                    <div class="stat-label">Powered Summary</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="summary-container">
+            <div class="summary-header">
+                <h2 class="summary-title">📋 AI Email Summary</h2>
+                <button class="refresh-btn" onclick="refreshSummary()">🔄 Refresh</button>
+            </div>
+            <div class="summary-content" id="summary-content">
+                {{ summary }}
+            </div>
+        </div>
+        
+        <div class="actions">
+            <a href="/emails/unread" class="btn btn-primary" target="_blank">📬 View Raw Emails</a>
+            <a href="/auth/logout" class="btn btn-danger">🚪 Logout</a>
+        </div>
+    </div>
+    
+    <script>
+        function refreshSummary() {
+            const content = document.getElementById('summary-content');
+            content.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Refreshing email summary...</p>
+                </div>
+            `;
+            
+            fetch('/emails/ai-summary')
+                .then(response => response.json())
+                .then(data => {
+                    content.innerHTML = data.summary;
+                    // Update email count
+                    document.querySelector('.stat-number').textContent = data.email_count;
+                })
+                .catch(error => {
+                    content.innerHTML = `Error refreshing summary: ${error.message}`;
+                });
+        }
+        
+        // Auto-refresh every 5 minutes
+        setInterval(refreshSummary, 300000);
+    </script>
+</body>
+</html> 
