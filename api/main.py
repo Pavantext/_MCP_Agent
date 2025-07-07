@@ -46,15 +46,19 @@ def dashboard(request: Request):
         email_service = EmailService()
         ai_service = AIService()
         
-        emails = email_service.get_unread_emails(tokens["access_token"])
+        emails = email_service.get_all_emails(tokens["access_token"])
         ai_summary = ai_service.summarize_emails(emails)
+        
+        # Count unread emails
+        unread_count = sum(1 for email in emails if not email.get("isRead", True))
         
         return templates.TemplateResponse(
             "dashboard.html",
             {
                 "request": request,
                 "summary": ai_summary,
-                "email_count": len(emails)
+                "email_count": len(emails),
+                "unread_count": unread_count
             }
         )
         

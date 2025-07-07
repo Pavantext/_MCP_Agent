@@ -117,11 +117,56 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             font-size: 0.95em;
             line-height: 1.7;
-            white-space: pre-wrap;
             max-height: 500px;
             overflow-y: auto;
             font-weight: 400;
             color: #2d3748;
+        }
+        
+        .summary-content h1, .summary-content h2, .summary-content h3 {
+            font-weight: 600;
+            color: #2d3748;
+            margin: 20px 0 10px 0;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 5px;
+        }
+        
+        .summary-content h1 {
+            font-size: 1.4em;
+            color: #1a202c;
+        }
+        
+        .summary-content h2 {
+            font-size: 1.2em;
+            color: #2d3748;
+        }
+        
+        .summary-content h3 {
+            font-size: 1.1em;
+            color: #4a5568;
+        }
+        
+        .summary-content p {
+            margin: 10px 0;
+        }
+        
+        .summary-content ul, .summary-content ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .summary-content li {
+            margin: 5px 0;
+        }
+        
+        .summary-content strong {
+            font-weight: 600;
+            color: #1a202c;
+        }
+        
+        .summary-content em {
+            font-style: italic;
+            color: #4a5568;
         }
         
         .actions {
@@ -206,6 +251,10 @@
             <div class="stats">
                 <div class="stat">
                     <div class="stat-number">{{ email_count }}</div>
+                    <div class="stat-label">Total Emails</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">{{ unread_count }}</div>
                     <div class="stat-label">Unread Emails</div>
                 </div>
                 <div class="stat">
@@ -221,12 +270,13 @@
                 <button class="refresh-btn" onclick="refreshSummary()">🔄 Refresh</button>
             </div>
             <div class="summary-content" id="summary-content">
-                {{ summary }}
+                {{ summary | safe }}
             </div>
         </div>
         
         <div class="actions">
-            <a href="/emails/unread" class="btn btn-primary" target="_blank">📬 View Raw Emails</a>
+            <a href="/emails/all" class="btn btn-primary" target="_blank">📬 View All Emails</a>
+            <a href="/emails/unread" class="btn btn-primary" target="_blank">📭 View Unread Only</a>
             <a href="/auth/logout" class="btn btn-danger">🚪 Logout</a>
         </div>
     </div>
@@ -245,8 +295,12 @@
                 .then(response => response.json())
                 .then(data => {
                     content.innerHTML = data.summary;
-                    // Update email count
-                    document.querySelector('.stat-number').textContent = data.email_count;
+                    // Update email counts
+                    const statNumbers = document.querySelectorAll('.stat-number');
+                    if (statNumbers.length >= 2) {
+                        statNumbers[0].textContent = data.email_count; // Total emails
+                        statNumbers[1].textContent = data.unread_count; // Unread emails
+                    }
                 })
                 .catch(error => {
                     content.innerHTML = `Error refreshing summary: ${error.message}`;

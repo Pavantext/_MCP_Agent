@@ -28,6 +28,19 @@ def get_email_summary(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get email summary: {str(e)}")
 
+@router.get("/all")
+def get_all_emails(
+    email_service: EmailService = Depends(get_email_service)
+) -> List[Dict]:
+    """Get all emails"""
+    if not is_authenticated():
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        return email_service.get_all_emails(tokens["access_token"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get emails: {str(e)}")
+
 @router.get("/unread")
 def get_unread_emails(
     email_service: EmailService = Depends(get_email_service)
@@ -51,12 +64,16 @@ def get_ai_email_summary(
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     try:
-        emails = email_service.get_unread_emails(tokens["access_token"])
+        emails = email_service.get_all_emails(tokens["access_token"])
         ai_summary = ai_service.summarize_emails(emails)
+        
+        # Count unread emails
+        unread_count = sum(1 for email in emails if not email.get("isRead", True))
         
         return {
             "summary": ai_summary,
             "email_count": len(emails),
+            "unread_count": unread_count,
             "status": "success"
         }
     except Exception as e:
