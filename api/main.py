@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 import os
 
-from .routers import auth, emails, chatbot
+from .routers import auth, emails, chatbot, github, github_chatbot
 from .services.email_service import EmailService
 from .services.ai_service import AIService
 from .routers.auth import is_authenticated, tokens
@@ -21,6 +21,8 @@ app = FastAPI(
 app.include_router(auth.router)
 app.include_router(emails.router)
 app.include_router(chatbot.router)
+app.include_router(github.router)
+app.include_router(github_chatbot.router)
 
 # Serve static files
 if os.path.exists("frontend/static"):
@@ -36,6 +38,80 @@ def home():
         return RedirectResponse(url="/dashboard", status_code=302)
     else:
         return RedirectResponse(url="/auth/login", status_code=302)
+
+@app.get("/auth/github/callback")
+def github_callback(code: str):
+    """Handle GitHub OAuth callback"""
+    try:
+        from .services.github_auth_service import GitHubAuthService
+        auth_service = GitHubAuthService()
+        token_response = auth_service.get_access_token(code)
+        
+        if "error" in token_response:
+            return HTMLResponse(content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>GitHub Authentication Error</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
+                    .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                    h1 {{ color: #dc3545; text-align: center; }}
+                    .error {{ background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+                    .back {{ text-align: center; margin-top: 30px; }}
+                    .back a {{ background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>❌ GitHub Authentication Error</h1>
+                    <div class="error">
+                        <h2>Failed to authenticate with GitHub</h2>
+                        <p>{token_response.get('error_description', token_response['error'])}</p>
+                    </div>
+                    <div class="back">
+                        <a href="/dashboard">← Back to Dashboard</a>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """)
+        
+        # Store the token (in production, use a proper database)
+        from .routers.github import github_tokens
+        github_tokens["github_access_token"] = token_response["access_token"]
+        
+        return RedirectResponse(url="/dashboard", status_code=302)
+        
+    except Exception as e:
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>GitHub Authentication Error</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                h1 {{ color: #dc3545; text-align: center; }}
+                .error {{ background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+                .back {{ text-align: center; margin-top: 30px; }}
+                .back a {{ background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>❌ GitHub Authentication Error</h1>
+                <div class="error">
+                    <h2>Failed to authenticate with GitHub</h2>
+                    <p>{str(e)}</p>
+                </div>
+                <div class="back">
+                    <a href="/dashboard">← Back to Dashboard</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        """)
 
 @app.get("/dashboard")
 def dashboard(request: Request):

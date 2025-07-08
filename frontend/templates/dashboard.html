@@ -384,7 +384,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📧 Email Summary Dashboard</h1>
+            <h1>📧 Email & 🐙 GitHub Summary Dashboard</h1>
             <div class="stats">
                 <div class="stat">
                     <div class="stat-number">{{ email_count }}</div>
@@ -393,6 +393,10 @@
                 <div class="stat">
                     <div class="stat-number">{{ unread_count }}</div>
                     <div class="stat-label">Unread Emails</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="github-repos">-</div>
+                    <div class="stat-label">GitHub Repos</div>
                 </div>
                 <div class="stat">
                     <div class="stat-number">AI</div>
@@ -408,6 +412,19 @@
             </div>
             <div class="summary-content" id="summary-content">
                 {{ summary | safe }}
+            </div>
+        </div>
+        
+        <div class="summary-container" id="github-summary-container" style="display: none;">
+            <div class="summary-header">
+                <h2 class="summary-title">🐙 AI GitHub Summary</h2>
+                <button class="refresh-btn" onclick="refreshGitHubSummary()">🔄 Refresh</button>
+            </div>
+            <div class="summary-content" id="github-summary-content">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading GitHub summary...</p>
+                </div>
             </div>
         </div>
         
@@ -431,9 +448,30 @@
             </div>
         </div>
         
+        <div class="chatbot-container" id="github-chatbot-container" style="display: none;">
+            <div class="chatbot-header">
+                <h2 class="chatbot-title">🐙 GitHub Assistant</h2>
+            </div>
+            <div class="chat-area">
+                <div class="chat-messages" id="github-chat-messages">
+                    <div class="message bot-message">
+                        <strong>GitHub Assistant:</strong> Hi! I'm your personal GitHub assistant. Ask me anything about your repositories, commits, issues, and pull requests. I can help you analyze your GitHub activity, find specific information, or answer questions about your development work. Try asking something like "How many repositories do I have?" or "What are my most recent commits?"
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" class="chat-input" id="github-chat-input" placeholder="Ask about your GitHub..." onkeypress="handleGitHubChatKeyPress(event)">
+                    <button class="send-btn" onclick="sendGitHubMessage()">Send</button>
+                </div>
+                <div class="suggestions" id="github-suggestions">
+                    <!-- GitHub suggestions will be loaded here -->
+                </div>
+            </div>
+        </div>
+        
         <div class="actions">
             <a href="/emails/all" class="btn btn-primary" target="_blank">📬 View All Emails</a>
             <a href="/emails/unread" class="btn btn-primary" target="_blank">📭 View Unread Only</a>
+            <button class="btn btn-primary" onclick="analyzeGitHub()" id="github-btn">🐙 Analyze My GitHub</button>
             <a href="/auth/logout" class="btn btn-danger">🚪 Logout</a>
         </div>
     </div>
@@ -469,10 +507,12 @@
         
         // Chatbot functionality
         let chatMessages = [];
+        let githubChatMessages = [];
         
         // Load suggestions on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadSuggestions();
+            checkGitHubAuth();
         });
         
         function loadSuggestions() {
@@ -561,6 +601,175 @@
         
         function removeLastBotMessage() {
             const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+        
+        // GitHub functionality
+        function checkGitHubAuth() {
+            fetch('/github/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.is_authenticated) {
+                        showGitHubFeatures();
+                        loadGitHubSummary();
+                        loadGitHubSuggestions();
+                    }
+                })
+                .catch(error => {
+                    console.log('GitHub not authenticated');
+                });
+        }
+        
+        function analyzeGitHub() {
+            const btn = document.getElementById('github-btn');
+            btn.textContent = '🔄 Authenticating...';
+            btn.disabled = true;
+            
+            fetch('/github/login')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.auth_url) {
+                        window.location.href = data.auth_url;
+                    } else {
+                        showGitHubFeatures();
+                        loadGitHubSummary();
+                        loadGitHubSuggestions();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    btn.textContent = '🐙 Analyze My GitHub';
+                    btn.disabled = false;
+                });
+        }
+        
+        function showGitHubFeatures() {
+            document.getElementById('github-summary-container').style.display = 'block';
+            document.getElementById('github-chatbot-container').style.display = 'block';
+            document.getElementById('github-btn').textContent = '✅ GitHub Connected';
+            document.getElementById('github-btn').disabled = true;
+        }
+        
+        function loadGitHubSummary() {
+            fetch('/github/ai-summary')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('github-summary-content').innerHTML = data.summary;
+                    document.getElementById('github-repos').textContent = data.total_repos;
+                })
+                .catch(error => {
+                    document.getElementById('github-summary-content').innerHTML = 'Error loading GitHub summary: ' + error.message;
+                });
+        }
+        
+        function refreshGitHubSummary() {
+            const content = document.getElementById('github-summary-content');
+            content.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Refreshing GitHub summary...</p>
+                </div>
+            `;
+            
+            fetch('/github/ai-summary')
+                .then(response => response.json())
+                .then(data => {
+                    content.innerHTML = data.summary;
+                    document.getElementById('github-repos').textContent = data.total_repos;
+                })
+                .catch(error => {
+                    content.innerHTML = `Error refreshing GitHub summary: ${error.message}`;
+                });
+        }
+        
+        function loadGitHubSuggestions() {
+            fetch('/github-chatbot/suggestions')
+                .then(response => response.json())
+                .then(data => {
+                    const suggestionsContainer = document.getElementById('github-suggestions');
+                    suggestionsContainer.innerHTML = '';
+                    
+                    data.suggestions.forEach(suggestion => {
+                        const chip = document.createElement('div');
+                        chip.className = 'suggestion-chip';
+                        chip.textContent = suggestion;
+                        chip.onclick = () => {
+                            document.getElementById('github-chat-input').value = suggestion;
+                            sendGitHubMessage();
+                        };
+                        suggestionsContainer.appendChild(chip);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading GitHub suggestions:', error);
+                });
+        }
+        
+        function handleGitHubChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendGitHubMessage();
+            }
+        }
+        
+        function sendGitHubMessage() {
+            const input = document.getElementById('github-chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addGitHubMessage(message, 'user');
+            input.value = '';
+            
+            // Show loading indicator
+            addGitHubMessage('Thinking...', 'bot', true);
+            
+            // Send message to API
+            fetch('/github-chatbot/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading message
+                removeLastGitHubBotMessage();
+                
+                // Add bot response
+                addGitHubMessage(data.response, 'bot');
+            })
+            .catch(error => {
+                // Remove loading message
+                removeLastGitHubBotMessage();
+                
+                // Add error message
+                addGitHubMessage('Sorry, I encountered an error. Please try again.', 'bot');
+                console.error('Error:', error);
+            });
+        }
+        
+        function addGitHubMessage(content, sender, isLoading = false) {
+            const messagesContainer = document.getElementById('github-chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            if (isLoading) {
+                messageDiv.innerHTML = `<strong>GitHub Assistant:</strong> ${content}<span class="loading-dots"></span>`;
+                messageDiv.id = 'github-loading-message';
+            } else {
+                messageDiv.innerHTML = content;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function removeLastGitHubBotMessage() {
+            const loadingMessage = document.getElementById('github-loading-message');
             if (loadingMessage) {
                 loadingMessage.remove();
             }
