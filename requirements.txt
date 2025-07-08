@@ -1,7 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart
 requests
 python-dotenv
-google-generativeai
 jinja2
-python-multipart
+aiofiles
+google-generativeai
+starlette
