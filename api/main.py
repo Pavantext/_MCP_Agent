@@ -10,11 +10,20 @@ from .services.email_service import EmailService
 from .services.ai_service import AIService
 from .routers.auth import is_authenticated, tokens
 
+# Constants
+APP_TITLE = "MCP Outlook Reader API"
+APP_DESCRIPTION = "A modular API service for reading and summarizing Outlook emails"
+APP_VERSION = "1.0.0"
+HOST = "127.0.0.1"
+PORT = 8000
+STATIC_DIR = "frontend/static"
+TEMPLATES_DIR = "frontend/templates"
+
 # Create FastAPI app
 app = FastAPI(
-    title="MCP Outlook Reader API",
-    description="A modular API service for reading and summarizing Outlook emails",
-    version="1.0.0"
+    title=APP_TITLE,
+    description=APP_DESCRIPTION,
+    version=APP_VERSION
 )
 
 # Include routers
@@ -25,11 +34,11 @@ app.include_router(github.router)
 app.include_router(github_chatbot.router)
 
 # Serve static files
-if os.path.exists("frontend/static"):
-    app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Templates
-templates = Jinja2Templates(directory="frontend/templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 @app.get("/")
 def home():
@@ -48,34 +57,10 @@ def github_callback(code: str):
         token_response = auth_service.get_access_token(code)
         
         if "error" in token_response:
-            return HTMLResponse(content=f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>GitHub Authentication Error</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
-                    .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                    h1 {{ color: #dc3545; text-align: center; }}
-                    .error {{ background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-                    .back {{ text-align: center; margin-top: 30px; }}
-                    .back a {{ background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>❌ GitHub Authentication Error</h1>
-                    <div class="error">
-                        <h2>Failed to authenticate with GitHub</h2>
-                        <p>{token_response.get('error_description', token_response['error'])}</p>
-                    </div>
-                    <div class="back">
-                        <a href="/dashboard">← Back to Dashboard</a>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """)
+            return _create_error_html_response(
+                "GitHub Authentication Error",
+                f"Failed to authenticate with GitHub: {token_response.get('error_description', token_response['error'])}"
+            )
         
         # Store the token (in production, use a proper database)
         from .routers.github import github_tokens
@@ -84,34 +69,10 @@ def github_callback(code: str):
         return RedirectResponse(url="/dashboard", status_code=302)
         
     except Exception as e:
-        return HTMLResponse(content=f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>GitHub Authentication Error</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
-                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                h1 {{ color: #dc3545; text-align: center; }}
-                .error {{ background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-                .back {{ text-align: center; margin-top: 30px; }}
-                .back a {{ background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>❌ GitHub Authentication Error</h1>
-                <div class="error">
-                    <h2>Failed to authenticate with GitHub</h2>
-                    <p>{str(e)}</p>
-                </div>
-                <div class="back">
-                    <a href="/dashboard">← Back to Dashboard</a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """)
+        return _create_error_html_response(
+            "GitHub Authentication Error",
+            f"Failed to authenticate with GitHub: {str(e)}"
+        )
 
 @app.get("/dashboard")
 def dashboard(request: Request):
@@ -140,34 +101,10 @@ def dashboard(request: Request):
         )
         
     except Exception as e:
-        return HTMLResponse(content=f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Error</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
-                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                h1 {{ color: #dc3545; text-align: center; }}
-                .error {{ background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-                .logout {{ text-align: center; margin-top: 30px; }}
-                .logout a {{ background: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>❌ Error</h1>
-                <div class="error">
-                    <h2>Failed to load email summary</h2>
-                    <p>{str(e)}</p>
-                </div>
-                <div class="logout">
-                    <a href="/auth/logout">🚪 Logout</a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """)
+        return _create_error_html_response(
+            "Error",
+            f"Failed to load email summary: {str(e)}"
+        )
 
 @app.get("/api/docs")
 def api_docs():
@@ -177,4 +114,35 @@ def api_docs():
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "MCP Outlook Reader API"} 
+    return {"status": "healthy", "service": APP_TITLE}
+
+def _create_error_html_response(title: str, error_message: str) -> HTMLResponse:
+    """Create a standardized error HTML response"""
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{title}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
+            .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            h1 {{ color: #dc3545; text-align: center; }}
+            .error {{ background: #f8d7da; color: #721c24; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .back {{ text-align: center; margin-top: 30px; }}
+            .back a {{ background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>❌ {title}</h1>
+            <div class="error">
+                <h2>An error occurred</h2>
+                <p>{error_message}</p>
+            </div>
+            <div class="back">
+                <a href="/dashboard">← Back to Dashboard</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    """) 

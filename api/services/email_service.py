@@ -2,41 +2,54 @@ import requests
 from typing import List, Dict, Optional
 from ..models.auth import EmailSummary
 
+# Constants
+GRAPH_API_BASE_URL = "https://graph.microsoft.com/v1.0"
+DEFAULT_EMAIL_LIMIT = 100
+DEFAULT_UNREAD_LIMIT = 50
+MAX_EMAILS_FOR_SUMMARY = 10
+MAX_EMAILS_FOR_AI = 30
 
 class EmailService:
     """Service for handling Microsoft Graph email operations"""
     
     def __init__(self):
-        self.base_url = "https://graph.microsoft.com/v1.0"
+        self.base_url = GRAPH_API_BASE_URL
     
-    def get_all_emails(self, access_token: str) -> List[Dict]:
-        """Get all emails from Microsoft Graph API"""
-        headers = {
+    def _get_headers(self, access_token: str) -> Dict[str, str]:
+        """Get headers with authentication token"""
+        return {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json"
         }
+    
+    def _make_request(self, url: str, headers: Dict[str, str], params: Optional[Dict] = None) -> Dict:
+        """Make HTTP request with error handling"""
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error making request to {url}: {str(e)}")
+            return {"value": []}
+    
+    def get_all_emails(self, access_token: str) -> List[Dict]:
+        """Get all emails from Microsoft Graph API"""
+        headers = self._get_headers(access_token)
         
         # Query for all emails
         params = {
-            "$top": 100,  # Limit to 100 emails
+            "$top": DEFAULT_EMAIL_LIMIT,
             "$orderby": "receivedDateTime desc",
             "$select": "subject,from,receivedDateTime,bodyPreview,id,isRead"
         }
         
-        try:
-            response = requests.get(
-                f"{self.base_url}/me/messages",
-                headers=headers,
-                params=params
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            return data.get("value", [])
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching emails: {str(e)}")
-            return []
+        data = self._make_request(
+            f"{self.base_url}/me/messages",
+            headers=headers,
+            params=params
+        )
+        
+        return data.get("value", [])
     
     def get_email_summary(self, access_token: str) -> EmailSummary:
         """Get a summary of all emails"""
@@ -55,7 +68,7 @@ class EmailService:
         summary_parts = []
         summary_parts.append(f"Found {len(emails)} total email(s) ({unread_count} unread):\n")
         
-        for i, email in enumerate(emails[:10], 1):  # Show first 10 emails
+        for i, email in enumerate(emails[:MAX_EMAILS_FOR_SUMMARY], 1):
             from_info = email.get("from", {}).get("emailAddress", {}).get("name", "Unknown")
             subject = email.get("subject", "No Subject")
             received = email.get("receivedDateTime", "Unknown")
@@ -67,8 +80,8 @@ class EmailService:
             summary_parts.append(f"   Received: {received}")
             summary_parts.append("")
         
-        if len(emails) > 10:
-            summary_parts.append(f"... and {len(emails) - 10} more emails")
+        if len(emails) > MAX_EMAILS_FOR_SUMMARY:
+            summary_parts.append(f"... and {len(emails) - MAX_EMAILS_FOR_SUMMARY} more emails")
         
         return EmailSummary(
             summary="\n".join(summary_parts),
@@ -77,40 +90,27 @@ class EmailService:
     
     def get_unread_emails(self, access_token: str) -> List[Dict]:
         """Get unread emails from Microsoft Graph API"""
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
+        headers = self._get_headers(access_token)
         
         # Query for unread emails
         params = {
             "$filter": "isRead eq false",
-            "$top": 50,  # Limit to 50 emails
+            "$top": DEFAULT_UNREAD_LIMIT,
             "$orderby": "receivedDateTime desc",
             "$select": "subject,from,receivedDateTime,bodyPreview,id"
         }
         
-        try:
-            response = requests.get(
-                f"{self.base_url}/me/messages",
-                headers=headers,
-                params=params
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            return data.get("value", [])
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching unread emails: {str(e)}")
-            return []
+        data = self._make_request(
+            f"{self.base_url}/me/messages",
+            headers=headers,
+            params=params
+        )
+        
+        return data.get("value", [])
     
     def mark_as_read(self, access_token: str, email_id: str) -> bool:
         """Mark an email as read"""
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
+        headers = self._get_headers(access_token)
         
         data = {
             "isRead": True
@@ -123,5 +123,5 @@ class EmailService:
                 json=data
             )
             return response.status_code == 200
-        except:
+        except requests.exceptions.RequestException:
             return False 

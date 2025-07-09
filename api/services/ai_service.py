@@ -5,6 +5,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Constants
+GEMINI_MODEL_NAME = 'gemini-1.5-flash'
+MAX_EMAILS_FOR_AI_PROCESSING = 30
+MAX_EMAILS_FOR_FALLBACK = 15
+MAX_REPOS_FOR_AI = 10
+MAX_ITEMS_FOR_AI = 10
+
 class AIService:
     """Service for AI-powered email and GitHub summarization"""
     
@@ -14,7 +21,7 @@ class AIService:
             raise ValueError("GEMINI_API_KEY environment variable is required")
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.model = genai.GenerativeModel(GEMINI_MODEL_NAME)
     
     def summarize_emails(self, emails: List[Dict]) -> str:
         """Generate AI summary of emails"""
@@ -27,15 +34,30 @@ class AIService:
         
         # Prepare email data for AI
         email_texts = []
-        for email in emails[:30]:  # Limit to 30 emails for AI processing
-            from_info = email.get("from", {}).get("emailAddress", {}).get("name", "Unknown")
-            subject = email.get("subject", "No Subject")
-            body_preview = email.get("bodyPreview", "")
-            received = email.get("receivedDateTime", "Unknown")
-            is_read = email.get("isRead", True)
-            status = "UNREAD" if not is_read else "READ"
-            
-            email_text = f"""
+        for email in emails[:MAX_EMAILS_FOR_AI_PROCESSING]:
+            email_text = self._format_email_for_ai(email)
+            email_texts.append(email_text)
+        
+        # Create prompt for AI
+        prompt = self._create_email_summary_prompt(email_texts, total_count, unread_count)
+        
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            print(f"Error generating AI summary: {str(e)}")
+            return self._fallback_summary(emails)
+    
+    def _format_email_for_ai(self, email: Dict) -> str:
+        """Format email data for AI processing"""
+        from_info = email.get("from", {}).get("emailAddress", {}).get("name", "Unknown")
+        subject = email.get("subject", "No Subject")
+        body_preview = email.get("bodyPreview", "")
+        received = email.get("receivedDateTime", "Unknown")
+        is_read = email.get("isRead", True)
+        status = "UNREAD" if not is_read else "READ"
+        
+        return f"""
 Status: {status}
 From: {from_info}
 Subject: {subject}
@@ -43,10 +65,10 @@ Received: {received}
 Preview: {body_preview}
 ---
 """
-            email_texts.append(email_text)
-        
-        # Create prompt for AI
-        prompt = f"""
+    
+    def _create_email_summary_prompt(self, email_texts: List[str], total_count: int, unread_count: int) -> str:
+        """Create prompt for email summary"""
+        return f"""
 You are an AI assistant that summarizes emails. Please provide a comprehensive, well-organized summary of the following {len(email_texts)} emails (out of {total_count} total emails, with {unread_count} unread).
 
 Focus on:
@@ -70,13 +92,6 @@ Please provide a clear, structured summary using HTML formatting. Use:
 
 Format the response as clean HTML that will display nicely in a web browser.
 """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Error generating AI summary: {str(e)}")
-            return self._fallback_summary(emails)
     
     def _fallback_summary(self, emails: List[Dict]) -> str:
         """Fallback summary when AI fails"""
@@ -89,7 +104,7 @@ Format the response as clean HTML that will display nicely in a web browser.
         html_parts.append('<h3>Recent Emails:</h3>')
         html_parts.append('<ul>')
         
-        for i, email in enumerate(emails[:15], 1):
+        for i, email in enumerate(emails[:MAX_EMAILS_FOR_FALLBACK], 1):
             from_info = email.get("from", {}).get("emailAddress", {}).get("name", "Unknown")
             subject = email.get("subject", "No Subject")
             is_read = email.get("isRead", True)
@@ -99,8 +114,8 @@ Format the response as clean HTML that will display nicely in a web browser.
         
         html_parts.append('</ul>')
         
-        if len(emails) > 15:
-            html_parts.append(f'<p><em>... and {len(emails) - 15} more emails</em></p>')
+        if len(emails) > MAX_EMAILS_FOR_FALLBACK:
+            html_parts.append(f'<p><em>... and {len(emails) - MAX_EMAILS_FOR_FALLBACK} more emails</em></p>')
         
         return "".join(html_parts)
     
@@ -116,34 +131,51 @@ Format the response as clean HTML that will display nicely in a web browser.
         pull_requests = github_data.get("pull_requests", [])
         
         # Create detailed context for AI
+        context_parts = self._create_github_context_for_ai(repos, commits, issues, pull_requests)
+        
+        # Create prompt for AI
+        prompt = self._create_github_summary_prompt(context_parts, repos, commits, issues, pull_requests)
+        
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            print(f"Error generating GitHub AI summary: {str(e)}")
+            return self._fallback_github_summary(github_data)
+    
+    def _create_github_context_for_ai(self, repos: List[Dict], commits: List[Dict], issues: List[Dict], pull_requests: List[Dict]) -> List[str]:
+        """Create context from GitHub data for AI processing"""
         context_parts = []
         
         # Repository information
         if repos:
             context_parts.append(f"Repositories ({len(repos)} total):")
-            for repo in repos[:10]:  # Show first 10 repos
+            for repo in repos[:MAX_REPOS_FOR_AI]:
                 context_parts.append(f"- {repo['full_name']}: {repo.get('description', 'No description')} ({repo['language'] or 'Unknown'}) - Stars: {repo['stargazers_count']}, Forks: {repo['forks_count']}")
         
         # Commit information
         if commits:
             context_parts.append(f"\nRecent Commits ({len(commits)} total):")
-            for commit in commits[:10]:  # Show first 10 commits
+            for commit in commits[:MAX_ITEMS_FOR_AI]:
                 context_parts.append(f"- {commit['repository']}: {commit['commit']['message'][:100]}...")
         
         # Issues information
         if issues:
             context_parts.append(f"\nIssues ({len(issues)} total):")
-            for issue in issues[:10]:  # Show first 10 issues
+            for issue in issues[:MAX_ITEMS_FOR_AI]:
                 context_parts.append(f"- {issue['repository']}: {issue['title']} (State: {issue['state']})")
         
         # Pull requests information
         if pull_requests:
             context_parts.append(f"\nPull Requests ({len(pull_requests)} total):")
-            for pr in pull_requests[:10]:  # Show first 10 PRs
+            for pr in pull_requests[:MAX_ITEMS_FOR_AI]:
                 context_parts.append(f"- {pr['repository']}: {pr['title']} (State: {pr['state']})")
         
-        # Create prompt for AI
-        prompt = f"""
+        return context_parts
+    
+    def _create_github_summary_prompt(self, context_parts: List[str], repos: List[Dict], commits: List[Dict], issues: List[Dict], pull_requests: List[Dict]) -> str:
+        """Create prompt for GitHub summary"""
+        return f"""
 You are an AI assistant that summarizes GitHub activity. Please provide a comprehensive, well-organized summary of the following GitHub data:
 
 {''.join(context_parts)}
@@ -171,13 +203,6 @@ Please provide a clear, structured summary using HTML formatting. Use:
 
 Format the response as clean HTML that will display nicely in a web browser.
 """
-        
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Error generating GitHub AI summary: {str(e)}")
-            return self._fallback_github_summary(github_data)
     
     def _fallback_github_summary(self, github_data: Dict) -> str:
         """Fallback summary when AI fails for GitHub data"""
@@ -193,21 +218,21 @@ Format the response as clean HTML that will display nicely in a web browser.
         if repos:
             html_parts.append('<h3>Top Repositories:</h3>')
             html_parts.append('<ul>')
-            for repo in repos[:10]:
+            for repo in repos[:MAX_REPOS_FOR_AI]:
                 html_parts.append(f'<li><strong>📦 {repo["full_name"]}:</strong> {repo.get("description", "No description")} ({repo["language"] or "Unknown"}) - ⭐ {repo["stargazers_count"]} stars</li>')
             html_parts.append('</ul>')
         
         if commits:
             html_parts.append('<h3>Recent Commits:</h3>')
             html_parts.append('<ul>')
-            for commit in commits[:10]:
+            for commit in commits[:MAX_ITEMS_FOR_AI]:
                 html_parts.append(f'<li><strong>💻 {commit["repository"]}:</strong> {commit["commit"]["message"][:100]}...</li>')
             html_parts.append('</ul>')
         
         if issues:
             html_parts.append('<h3>Recent Issues:</h3>')
             html_parts.append('<ul>')
-            for issue in issues[:10]:
+            for issue in issues[:MAX_ITEMS_FOR_AI]:
                 status = "🔴" if issue["state"] == "open" else "🟢"
                 html_parts.append(f'<li><strong>{status} {issue["repository"]}:</strong> {issue["title"]}</li>')
             html_parts.append('</ul>')
