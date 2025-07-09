@@ -237,4 +237,185 @@ Format the response as clean HTML that will display nicely in a web browser.
                 html_parts.append(f'<li><strong>{status} {issue["repository"]}:</strong> {issue["title"]}</li>')
             html_parts.append('</ul>')
         
+        return "".join(html_parts)
+    
+    def summarize_teams_data(self, teams_data: Dict) -> str:
+        """Generate AI summary of Teams data"""
+        if not teams_data:
+            return "No Teams data to summarize."
+        
+        # Prepare Teams data for AI
+        teams = teams_data.get("teams", [])
+        channels = teams_data.get("channels", [])
+        messages = teams_data.get("messages", [])
+        meetings = teams_data.get("meetings", [])
+        
+        # Create detailed context for AI
+        context_parts = self._create_teams_context_for_ai(teams, channels, messages, meetings)
+        
+        # Create prompt for AI
+        prompt = self._create_teams_summary_prompt(context_parts, teams, channels, messages, meetings)
+        
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            print(f"Error generating Teams AI summary: {str(e)}")
+            return self._fallback_teams_summary(teams_data)
+    
+    def _create_teams_context_for_ai(self, teams: List[Dict], channels: List[Dict], messages: List[Dict], meetings: List[Dict] = None) -> List[str]:
+        """Create context from Teams data for AI processing"""
+        context_parts = []
+        
+        # Teams information
+        if teams:
+            context_parts.append(f"Teams ({len(teams)} total):")
+            for team in teams[:MAX_ITEMS_FOR_AI]:
+                context_parts.append(f"- {team.get('displayName', 'Unknown Team')} (ID: {team.get('id', 'N/A')})")
+        
+        # Channels information
+        if channels:
+            context_parts.append(f"\nChannels ({len(channels)} total):")
+            team_channels = {}
+            for channel in channels:
+                team_name = channel.get("team_name", "Unknown Team")
+                if team_name not in team_channels:
+                    team_channels[team_name] = []
+                team_channels[team_name].append(channel.get("displayName", "Unknown Channel"))
+            
+            for team_name, channel_list in team_channels.items():
+                context_parts.append(f"- {team_name}: {', '.join(channel_list[:5])}")
+        
+        # Messages information
+        if messages:
+            context_parts.append(f"\nRecent Messages ({len(messages)} total):")
+            message_summary = {}
+            for message in messages[:MAX_ITEMS_FOR_AI]:
+                source = message.get("team_name", "Personal Chat")
+                if source not in message_summary:
+                    message_summary[source] = 0
+                message_summary[source] += 1
+            
+            for source, count in message_summary.items():
+                context_parts.append(f"- {source}: {count} messages")
+        
+        # Meetings information
+        if meetings:
+            context_parts.append(f"\nMeetings ({len(meetings)} total):")
+            for meeting in meetings[:MAX_ITEMS_FOR_AI]:
+                start_time = meeting.get("start", "Unknown")
+                if start_time and "T" in start_time:
+                    # Format the date for better readability
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                        formatted_time = dt.strftime("%Y-%m-%d %H:%M")
+                    except:
+                        formatted_time = start_time
+                else:
+                    formatted_time = start_time
+                
+                context_parts.append(f"- {meeting.get('subject', 'No Subject')} (Start: {formatted_time}, Organizer: {meeting.get('organizer', 'Unknown')})")
+        
+        return context_parts
+    
+    def _create_teams_summary_prompt(self, context_parts: List[str], teams: List[Dict], channels: List[Dict], messages: List[Dict], meetings: List[Dict] = None) -> str:
+        """Create prompt for Teams summary"""
+        meetings_count = len(meetings) if meetings else 0
+        
+        return f"""
+You are an AI assistant that summarizes Microsoft Teams activity. Please provide a comprehensive, well-organized summary of the following Teams data:
+
+{''.join(context_parts)}
+
+Summary Statistics:
+- Total Teams: {len(teams)}
+- Total Channels: {len(channels)}
+- Total Messages: {len(messages)}
+- Total Meetings: {meetings_count}
+
+Focus on:
+1. Team collaboration patterns and activity levels
+2. Most active teams and channels
+3. Communication trends and patterns
+4. Personal vs team communication balance
+5. Recent conversation topics and themes
+6. Team structure and organization
+7. Meeting patterns and scheduling
+8. Online meeting participation
+
+Please provide a clear, structured summary using HTML formatting. Use:
+- <h2> for main sections
+- <h3> for subsections
+- <strong> for emphasis
+- <ul> and <li> for lists
+- <p> for paragraphs
+
+Format the response as clean HTML that will display nicely in a web browser.
+"""
+    
+    def _fallback_teams_summary(self, teams_data: Dict) -> str:
+        """Fallback summary when AI fails for Teams data"""
+        teams = teams_data.get("teams", [])
+        channels = teams_data.get("channels", [])
+        messages = teams_data.get("messages", [])
+        meetings = teams_data.get("meetings", [])
+        
+        html_parts = []
+        html_parts.append(f'<h2>💬 Teams Summary</h2>')
+        html_parts.append(f'<p><strong>Total Teams:</strong> {len(teams)} | <strong>Channels:</strong> {len(channels)} | <strong>Messages:</strong> {len(messages)} | <strong>Meetings:</strong> {len(meetings)}</p>')
+        
+        if teams:
+            html_parts.append('<h3>Your Teams:</h3>')
+            html_parts.append('<ul>')
+            for team in teams[:MAX_ITEMS_FOR_AI]:
+                html_parts.append(f'<li><strong>👥 {team.get("displayName", "Unknown Team")}</strong></li>')
+            html_parts.append('</ul>')
+        
+        if channels:
+            html_parts.append('<h3>Active Channels:</h3>')
+            html_parts.append('<ul>')
+            team_channels = {}
+            for channel in channels:
+                team_name = channel.get("team_name", "Unknown Team")
+                if team_name not in team_channels:
+                    team_channels[team_name] = []
+                team_channels[team_name].append(channel.get("displayName", "Unknown Channel"))
+            
+            for team_name, channel_list in team_channels.items():
+                html_parts.append(f'<li><strong>📢 {team_name}:</strong> {", ".join(channel_list[:3])}</li>')
+            html_parts.append('</ul>')
+        
+        if messages:
+            html_parts.append('<h3>Recent Activity:</h3>')
+            html_parts.append('<ul>')
+            message_summary = {}
+            for message in messages[:MAX_ITEMS_FOR_AI]:
+                source = message.get("team_name", "Personal Chat")
+                if source not in message_summary:
+                    message_summary[source] = 0
+                message_summary[source] += 1
+            
+            for source, count in message_summary.items():
+                html_parts.append(f'<li><strong>💬 {source}:</strong> {count} recent messages</li>')
+            html_parts.append('</ul>')
+        
+        if meetings:
+            html_parts.append('<h3>Upcoming Meetings:</h3>')
+            html_parts.append('<ul>')
+            for meeting in meetings[:MAX_ITEMS_FOR_AI]:
+                start_time = meeting.get("start", "Unknown")
+                if start_time and "T" in start_time:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                        formatted_time = dt.strftime("%Y-%m-%d %H:%M")
+                    except:
+                        formatted_time = start_time
+                else:
+                    formatted_time = start_time
+                
+                html_parts.append(f'<li><strong>📅 {meeting.get("subject", "No Subject")}</strong> - {formatted_time} (Organizer: {meeting.get("organizer", "Unknown")})</li>')
+            html_parts.append('</ul>')
+        
         return "".join(html_parts) 

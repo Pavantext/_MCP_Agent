@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 import os
 
-from .routers import auth, emails, chatbot, github, github_chatbot
+from .routers import auth, emails, chatbot, github, github_chatbot, teams, teams_chatbot
 from .services.email_service import EmailService
 from .services.ai_service import AIService
 from .routers.auth import is_authenticated, tokens
@@ -32,6 +32,8 @@ app.include_router(emails.router)
 app.include_router(chatbot.router)
 app.include_router(github.router)
 app.include_router(github_chatbot.router)
+app.include_router(teams.router)
+app.include_router(teams_chatbot.router)
 
 # Serve static files
 if os.path.exists(STATIC_DIR):
@@ -72,6 +74,54 @@ def github_callback(code: str):
         return _create_error_html_response(
             "GitHub Authentication Error",
             f"Failed to authenticate with GitHub: {str(e)}"
+        )
+
+@app.get("/auth/teams/callback")
+def teams_callback(code: str = None, error: str = None, error_description: str = None):
+    """Handle Teams OAuth callback"""
+    try:
+        # Debug logging
+        print(f"Teams callback received - code: {code}, error: {error}, error_description: {error_description}")
+        
+        # Check for OAuth errors first
+        if error:
+            error_msg = error_description or error
+            print(f"Teams OAuth error: {error_msg}")
+            return _create_error_html_response(
+                "Teams Authentication Error",
+                f"OAuth error: {error_msg}"
+            )
+        
+        # Check if code is provided
+        if not code:
+            print("Teams callback: No authorization code received")
+            return _create_error_html_response(
+                "Teams Authentication Error",
+                "No authorization code received from Microsoft. Please try again."
+            )
+        
+        from .services.teams_auth_service import TeamsAuthService
+        auth_service = TeamsAuthService()
+        token_response = auth_service.get_access_token(code)
+        
+        if "error" in token_response:
+            return _create_error_html_response(
+                "Teams Authentication Error",
+                f"Failed to authenticate with Teams: {token_response.get('error_description', token_response['error'])}"
+            )
+        
+        # Store the token (in production, use a proper database)
+        from .routers.teams import teams_tokens
+        teams_tokens["teams_access_token"] = token_response["access_token"]
+        if "refresh_token" in token_response:
+            teams_tokens["teams_refresh_token"] = token_response["refresh_token"]
+        
+        return RedirectResponse(url="/dashboard", status_code=302)
+        
+    except Exception as e:
+        return _create_error_html_response(
+            "Teams Authentication Error",
+            f"Failed to authenticate with Teams: {str(e)}"
         )
 
 @app.get("/dashboard")

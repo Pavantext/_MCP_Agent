@@ -378,6 +378,17 @@
             h1 {
                 font-size: 2em;
             }
+            
+            /* Make cards stack vertically on mobile */
+            .summary-container,
+            .chatbot-container {
+                flex: none !important;
+            }
+            
+            /* Stack rows vertically on mobile */
+            div[style*="display: flex"] {
+                flex-direction: column !important;
+            }
         }
     </style>
 </head>
@@ -399,79 +410,140 @@
                     <div class="stat-label">GitHub Repos</div>
                 </div>
                 <div class="stat">
+                    <div class="stat-number" id="teams-count">-</div>
+                    <div class="stat-label">Teams</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="meetings-count">-</div>
+                    <div class="stat-label">Meetings</div>
+                </div>
+                <div class="stat">
                     <div class="stat-number">AI</div>
                     <div class="stat-label">Powered Summary</div>
                 </div>
             </div>
         </div>
         
-        <div class="summary-container">
-            <div class="summary-header">
-                <h2 class="summary-title">📋 AI Email Summary</h2>
-                <button class="refresh-btn" onclick="refreshSummary()">🔄 Refresh</button>
-            </div>
-            <div class="summary-content" id="summary-content">
-                {{ summary | safe }}
-            </div>
-        </div>
-        
-        <div class="summary-container" id="github-summary-container" style="display: none;">
-            <div class="summary-header">
-                <h2 class="summary-title">🐙 AI GitHub Summary</h2>
-                <button class="refresh-btn" onclick="refreshGitHubSummary()">🔄 Refresh</button>
-            </div>
-            <div class="summary-content" id="github-summary-content">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Loading GitHub summary...</p>
+        <!-- Email Row -->
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div class="summary-container" style="flex: 1;">
+                <div class="summary-header">
+                    <h2 class="summary-title">📋 AI Email Summary</h2>
+                    <button class="refresh-btn" onclick="refreshSummary()">🔄 Refresh</button>
+                </div>
+                <div class="summary-content" id="summary-content">
+                    {{ summary | safe }}
                 </div>
             </div>
-        </div>
-        
-        <div class="chatbot-container">
-            <div class="chatbot-header">
-                <h2 class="chatbot-title">🤖 Email Assistant</h2>
-            </div>
-            <div class="chat-area">
-                <div class="chat-messages" id="chat-messages">
-                    <div class="message bot-message">
-                        <strong>Email Assistant:</strong> Hi! I'm your personal email assistant. Ask me anything about your emails - I can help you find specific emails, analyze patterns, or answer questions about your inbox. Try asking something like "How many unread emails do I have?" or "Show me emails from a specific sender."
+            
+            <div class="chatbot-container" style="flex: 1;">
+                <div class="chatbot-header">
+                    <h2 class="chatbot-title">🤖 Email Assistant</h2>
+                </div>
+                <div class="chat-area">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="message bot-message">
+                            <strong>Email Assistant:</strong> Hi! I'm your personal email assistant. Ask me anything about your emails - I can help you find specific emails, analyze patterns, or answer questions about your inbox. Try asking something like "How many unread emails do I have?" or "Show me emails from a specific sender."
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <input type="text" class="chat-input" id="chat-input" placeholder="Ask about your emails..." onkeypress="handleChatKeyPress(event)">
+                        <button class="send-btn" onclick="sendMessage()">Send</button>
+                    </div>
+                    <div class="suggestions" id="suggestions">
+                        <!-- Suggestions will be loaded here -->
                     </div>
                 </div>
-                <div class="chat-input-container">
-                    <input type="text" class="chat-input" id="chat-input" placeholder="Ask about your emails..." onkeypress="handleChatKeyPress(event)">
-                    <button class="send-btn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+        
+        <!-- GitHub Row -->
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div class="summary-container" id="github-summary-container" style="flex: 1; display: none;">
+                <div class="summary-header">
+                    <h2 class="summary-title">🐙 AI GitHub Summary</h2>
+                    <button class="refresh-btn" onclick="refreshGitHubSummary()">🔄 Refresh</button>
                 </div>
-                <div class="suggestions" id="suggestions">
-                    <!-- Suggestions will be loaded here -->
+                <div class="summary-content" id="github-summary-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading GitHub summary...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chatbot-container" id="github-chatbot-container" style="flex: 1; display: none;">
+                <div class="chatbot-header">
+                    <h2 class="chatbot-title">🐙 GitHub Assistant</h2>
+                </div>
+                <div class="chat-area">
+                    <div class="chat-messages" id="github-chat-messages">
+                        <div class="message bot-message">
+                            <strong>GitHub Assistant:</strong> Hi! I'm your personal GitHub assistant. Ask me anything about your repositories, commits, issues, and pull requests. I can help you analyze your GitHub activity, find specific information, or answer questions about your development work. Try asking something like "How many repositories do I have?" or "What are my most recent commits?"
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <input type="text" class="chat-input" id="github-chat-input" placeholder="Ask about your GitHub..." onkeypress="handleGitHubChatKeyPress(event)">
+                        <button class="send-btn" onclick="sendGitHubMessage()">Send</button>
+                    </div>
+                    <div class="suggestions" id="github-suggestions">
+                        <!-- GitHub suggestions will be loaded here -->
+                    </div>
                 </div>
             </div>
         </div>
         
-        <div class="chatbot-container" id="github-chatbot-container" style="display: none;">
-            <div class="chatbot-header">
-                <h2 class="chatbot-title">🐙 GitHub Assistant</h2>
-            </div>
-            <div class="chat-area">
-                <div class="chat-messages" id="github-chat-messages">
-                    <div class="message bot-message">
-                        <strong>GitHub Assistant:</strong> Hi! I'm your personal GitHub assistant. Ask me anything about your repositories, commits, issues, and pull requests. I can help you analyze your GitHub activity, find specific information, or answer questions about your development work. Try asking something like "How many repositories do I have?" or "What are my most recent commits?"
+        <!-- Teams Row -->
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div class="summary-container" id="teams-summary-container" style="flex: 1; display: none;">
+                <div class="summary-header">
+                    <h2 class="summary-title">💬 AI Teams Summary</h2>
+                    <button class="refresh-btn" onclick="refreshTeamsSummary()">🔄 Refresh</button>
+                </div>
+                <div class="summary-content" id="teams-summary-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading Teams summary...</p>
                     </div>
                 </div>
-                <div class="chat-input-container">
-                    <input type="text" class="chat-input" id="github-chat-input" placeholder="Ask about your GitHub..." onkeypress="handleGitHubChatKeyPress(event)">
-                    <button class="send-btn" onclick="sendGitHubMessage()">Send</button>
+            </div>
+            
+            <div class="chatbot-container" id="teams-chatbot-container" style="flex: 1; display: none;">
+                <div class="chatbot-header">
+                    <h2 class="chatbot-title">💬 Teams Assistant</h2>
                 </div>
-                <div class="suggestions" id="github-suggestions">
-                    <!-- GitHub suggestions will be loaded here -->
+                <div class="chat-area">
+                    <div class="chat-messages" id="teams-chat-messages">
+                        <div class="message bot-message">
+                            <strong>Teams Assistant:</strong> Hi! I'm your personal Microsoft Teams assistant. Ask me anything about your teams, channels, messages, and conversations. I can help you analyze your Teams activity, find specific information, or answer questions about your collaboration work. Try asking something like "How many teams do I have?" or "What are my most active channels?"
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <input type="text" class="chat-input" id="teams-chat-input" placeholder="Ask about your Teams..." onkeypress="handleTeamsChatKeyPress(event)">
+                        <button class="send-btn" onclick="sendTeamsMessage()">Send</button>
+                    </div>
+                    <div class="suggestions" id="teams-suggestions">
+                        <!-- Teams suggestions will be loaded here -->
+                    </div>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Connect Buttons Row -->
+        <div style="display: flex; gap: 20px; margin-bottom: 20px; justify-content: center;">
+            <div style="flex: 1; text-align: center;">
+                <a href="/emails/all" class="btn btn-primary" target="_blank">📬 View All Emails</a>
+                <a href="/emails/unread" class="btn btn-primary" target="_blank">📭 View Unread Only</a>
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <button class="btn btn-primary" onclick="analyzeGitHub()" id="github-btn">🐙 Analyze My GitHub</button>
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <button class="btn btn-primary" onclick="analyzeTeams()" id="teams-btn">💬 Connect to Teams</button>
             </div>
         </div>
         
         <div class="actions">
-            <a href="/emails/all" class="btn btn-primary" target="_blank">📬 View All Emails</a>
-            <a href="/emails/unread" class="btn btn-primary" target="_blank">📭 View Unread Only</a>
-            <button class="btn btn-primary" onclick="analyzeGitHub()" id="github-btn">🐙 Analyze My GitHub</button>
             <a href="/auth/logout" class="btn btn-danger">🚪 Logout</a>
         </div>
     </div>
@@ -513,6 +585,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadSuggestions();
             checkGitHubAuth();
+            checkTeamsAuth();
         });
         
         function loadSuggestions() {
@@ -770,6 +843,177 @@
         
         function removeLastGitHubBotMessage() {
             const loadingMessage = document.getElementById('github-loading-message');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+        
+        // Teams functionality
+        function checkTeamsAuth() {
+            fetch('/teams/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.is_authenticated) {
+                        showTeamsFeatures();
+                        loadTeamsSummary();
+                        loadTeamsSuggestions();
+                    }
+                })
+                .catch(error => {
+                    console.log('Teams not authenticated');
+                });
+        }
+        
+        function analyzeTeams() {
+            const btn = document.getElementById('teams-btn');
+            btn.textContent = '🔄 Authenticating...';
+            btn.disabled = true;
+            
+            fetch('/teams/login')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.auth_url) {
+                        window.location.href = data.auth_url;
+                    } else {
+                        showTeamsFeatures();
+                        loadTeamsSummary();
+                        loadTeamsSuggestions();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    btn.textContent = '💬 Connect to Teams';
+                    btn.disabled = false;
+                });
+        }
+        
+        function showTeamsFeatures() {
+            document.getElementById('teams-summary-container').style.display = 'block';
+            document.getElementById('teams-chatbot-container').style.display = 'block';
+            document.getElementById('teams-btn').textContent = '✅ Teams Connected';
+            document.getElementById('teams-btn').disabled = true;
+        }
+        
+        function loadTeamsSummary() {
+            fetch('/teams/ai-summary')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('teams-summary-content').innerHTML = data.summary;
+                    document.getElementById('teams-count').textContent = data.total_teams;
+                    document.getElementById('meetings-count').textContent = data.total_meetings || 0;
+                })
+                .catch(error => {
+                    document.getElementById('teams-summary-content').innerHTML = 'Error loading Teams summary: ' + error.message;
+                });
+        }
+        
+        function refreshTeamsSummary() {
+            const content = document.getElementById('teams-summary-content');
+            content.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Refreshing Teams summary...</p>
+                </div>
+            `;
+            
+            fetch('/teams/ai-summary')
+                .then(response => response.json())
+                .then(data => {
+                    content.innerHTML = data.summary;
+                    document.getElementById('teams-count').textContent = data.total_teams;
+                    document.getElementById('meetings-count').textContent = data.total_meetings || 0;
+                })
+                .catch(error => {
+                    content.innerHTML = `Error refreshing Teams summary: ${error.message}`;
+                });
+        }
+        
+        function loadTeamsSuggestions() {
+            fetch('/teams-chatbot/suggestions')
+                .then(response => response.json())
+                .then(data => {
+                    const suggestionsContainer = document.getElementById('teams-suggestions');
+                    suggestionsContainer.innerHTML = '';
+                    
+                    data.suggestions.forEach(suggestion => {
+                        const chip = document.createElement('div');
+                        chip.className = 'suggestion-chip';
+                        chip.textContent = suggestion;
+                        chip.onclick = () => {
+                            document.getElementById('teams-chat-input').value = suggestion;
+                            sendTeamsMessage();
+                        };
+                        suggestionsContainer.appendChild(chip);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading Teams suggestions:', error);
+                });
+        }
+        
+        function handleTeamsChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendTeamsMessage();
+            }
+        }
+        
+        function sendTeamsMessage() {
+            const input = document.getElementById('teams-chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addTeamsMessage(message, 'user');
+            input.value = '';
+            
+            // Show loading indicator
+            addTeamsMessage('Thinking...', 'bot', true);
+            
+            // Send message to API
+            fetch('/teams-chatbot/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading message
+                removeLastTeamsBotMessage();
+                
+                // Add bot response
+                addTeamsMessage(data.response, 'bot');
+            })
+            .catch(error => {
+                // Remove loading message
+                removeLastTeamsBotMessage();
+                
+                // Add error message
+                addTeamsMessage('Sorry, I encountered an error. Please try again.', 'bot');
+                console.error('Error:', error);
+            });
+        }
+        
+        function addTeamsMessage(content, sender, isLoading = false) {
+            const messagesContainer = document.getElementById('teams-chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            if (isLoading) {
+                messageDiv.innerHTML = `<strong>Teams Assistant:</strong> ${content}<span class="loading-dots"></span>`;
+                messageDiv.id = 'teams-loading-message';
+            } else {
+                messageDiv.innerHTML = content;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function removeLastTeamsBotMessage() {
+            const loadingMessage = document.getElementById('teams-loading-message');
             if (loadingMessage) {
                 loadingMessage.remove();
             }
