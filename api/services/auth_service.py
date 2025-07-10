@@ -13,7 +13,8 @@ class AuthService:
     def __init__(self):
         self.client_id = os.getenv("CLIENT_ID")
         self.client_secret = os.getenv("CLIENT_SECRET")
-        self.tenant_id = os.getenv("TENANT_ID")
+        # Use 'common' for multi-tenant support
+        self.tenant_id = os.getenv("TENANT_ID", "common")
         self.redirect_uri = os.getenv("REDIRECT_URI")
         self.scopes = os.getenv("SCOPES")
         

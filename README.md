@@ -155,18 +155,48 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 ## 🚀 Running the Application
 
-### Start the Server
+### **For Development (Local Setup)**
+
+#### Start the Server
 ```bash
 python app.py
 ```
 
 The application will be available at: `http://localhost:8000`
 
-### First Time Setup
+#### First Time Setup
 1. Open `http://localhost:8000` in your browser
 2. Click **Login with Microsoft** to authenticate
 3. Grant permissions when prompted
 4. You'll be redirected to the dashboard
+
+### **For Production Deployment**
+
+**🎯 Recommended: Multi-Tenant Setup (User-Friendly)**
+
+For production deployment, we recommend using a **multi-tenant Azure app registration** that allows users to login without any setup:
+
+1. **Run the deployment setup script**
+   ```bash
+   python deploy.py
+   ```
+
+2. **Follow the setup instructions** to create:
+   - Multi-tenant Azure app registration
+   - GitHub OAuth app
+   - Google Cloud API key
+
+3. **Update environment variables** with your production credentials
+
+4. **Deploy with HTTPS** (required for OAuth)
+
+**Benefits:**
+- ✅ **Zero user setup** - users just click login
+- ✅ **Works with any Microsoft account** (personal or organizational)
+- ✅ **Single app handles all users**
+- ✅ **Automatic permission handling**
+
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed instructions.
 
 ## 📊 Dashboard Features
 
