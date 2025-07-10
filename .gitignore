@@ -32,6 +32,7 @@ wheels/
 .env.development
 .env.test
 .env.production
+.env.production.template
 
 # IDE
 .vscode/
