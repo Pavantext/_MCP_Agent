@@ -460,3 +460,15 @@ pip install -r requirements.txt
 ---
 
 **Note**: This application is designed for development and testing purposes. For production use, implement proper security measures, database storage, and monitoring.
+
+## 🚀 Deploying to Render
+
+1. Push your code to a public or private GitHub repository.
+2. [Create a new Web Service on Render](https://dashboard.render.com/new/web).
+3. Connect your repository and select the branch to deploy.
+4. Render will automatically detect the `render.yaml` file and use it for configuration.
+5. Set the required environment variables (e.g., `GEMINI_API_KEY`, etc.) in the Render dashboard.
+6. The service will start using `python deploy.py` and listen on port 10000.
+7. Access your app at the provided Render URL.
+
+For more details, see the [Render documentation](https://render.com/docs/deploy-fastapi).

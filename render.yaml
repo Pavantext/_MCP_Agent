@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: mcp-agent-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python deploy.py
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OTHER_SECRET
+        sync: false
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    region: oregon
+    runtime: python3.10
+    disk:
+      name: data
+      mountPath: /data
+    ports:
+      - 10000 
