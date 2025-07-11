@@ -54,25 +54,20 @@ def home(request: Request):
         return RedirectResponse(url="/auth/login", status_code=302)
 
 @app.get("/auth/github/callback")
-def github_callback(code: str):
+def github_callback(request: Request, code: str):
     """Handle GitHub OAuth callback"""
     try:
         from .services.github_auth_service import GitHubAuthService
         auth_service = GitHubAuthService()
         token_response = auth_service.get_access_token(code)
-        
         if "error" in token_response:
             return _create_error_html_response(
                 "GitHub Authentication Error",
                 f"Failed to authenticate with GitHub: {token_response.get('error_description', token_response['error'])}"
             )
-        
-        # Store the token (in production, use a proper database)
-        from .routers.github import github_tokens
-        github_tokens["github_access_token"] = token_response["access_token"]
-        
+        # Store the token in the session
+        session_tokens.set_github_token(request, token_response["access_token"])
         return RedirectResponse(url="/dashboard", status_code=302)
-        
     except Exception as e:
         return _create_error_html_response(
             "GitHub Authentication Error",
@@ -80,13 +75,10 @@ def github_callback(code: str):
         )
 
 @app.get("/auth/teams/callback")
-def teams_callback(code: str = None, error: str = None, error_description: str = None):
+def teams_callback(request: Request, code: str = None, error: str = None, error_description: str = None):
     """Handle Teams OAuth callback"""
     try:
-        # Debug logging
         print(f"Teams callback received - code: {code}, error: {error}, error_description: {error_description}")
-        
-        # Check for OAuth errors first
         if error:
             error_msg = error_description or error
             print(f"Teams OAuth error: {error_msg}")
@@ -94,33 +86,23 @@ def teams_callback(code: str = None, error: str = None, error_description: str =
                 "Teams Authentication Error",
                 f"OAuth error: {error_msg}"
             )
-        
-        # Check if code is provided
         if not code:
             print("Teams callback: No authorization code received")
             return _create_error_html_response(
                 "Teams Authentication Error",
                 "No authorization code received from Microsoft. Please try again."
             )
-        
         from .services.teams_auth_service import TeamsAuthService
         auth_service = TeamsAuthService()
         token_response = auth_service.get_access_token(code)
-        
         if "error" in token_response:
             return _create_error_html_response(
                 "Teams Authentication Error",
                 f"Failed to authenticate with Teams: {token_response.get('error_description', token_response['error'])}"
             )
-        
-        # Store the token (in production, use a proper database)
-        from .routers.teams import teams_tokens
-        teams_tokens["teams_access_token"] = token_response["access_token"]
-        if "refresh_token" in token_response:
-            teams_tokens["teams_refresh_token"] = token_response["refresh_token"]
-        
+        # Store the token in the session
+        session_tokens.set_teams_token(request, token_response["access_token"], token_response.get("refresh_token"))
         return RedirectResponse(url="/dashboard", status_code=302)
-        
     except Exception as e:
         return _create_error_html_response(
             "Teams Authentication Error",
