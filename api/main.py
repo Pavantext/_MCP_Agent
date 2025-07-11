@@ -4,11 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 import os
+from starlette.middleware.sessions import SessionMiddleware
 
 from .routers import auth, emails, chatbot, github, github_chatbot, teams, teams_chatbot
 from .services.email_service import EmailService
 from .services.ai_service import AIService
-from .routers.auth import is_authenticated, tokens
+from .routers.auth import is_authenticated
+from .utils import session_tokens
 
 # Constants
 APP_TITLE = "MCP Outlook Reader API"
@@ -25,6 +27,7 @@ app = FastAPI(
     description=APP_DESCRIPTION,
     version=APP_VERSION
 )
+app.add_middleware(SessionMiddleware, secret_key=os.getenv('SESSION_SECRET_KEY', 'super-secret-key'))
 
 # Include routers
 app.include_router(auth.router)
@@ -43,9 +46,9 @@ if os.path.exists(STATIC_DIR):
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 @app.get("/")
-def home():
+def home(request: Request):
     """Main entry point - redirects based on authentication status"""
-    if is_authenticated():
+    if is_authenticated(request):
         return RedirectResponse(url="/dashboard", status_code=302)
     else:
         return RedirectResponse(url="/auth/login", status_code=302)
@@ -127,19 +130,15 @@ def teams_callback(code: str = None, error: str = None, error_description: str =
 @app.get("/dashboard")
 def dashboard(request: Request):
     """Main dashboard - shows email summary if authenticated"""
-    if not is_authenticated():
+    if not is_authenticated(request):
         return RedirectResponse(url="/auth/login", status_code=302)
-    
     try:
         email_service = EmailService()
         ai_service = AIService()
-        
-        emails = email_service.get_all_emails(tokens["access_token"])
+        access_token = session_tokens.get_outlook_token(request)
+        emails = email_service.get_all_emails(access_token)
         ai_summary = ai_service.summarize_emails(emails)
-        
-        # Count unread emails
         unread_count = sum(1 for email in emails if not email.get("isRead", True))
-        
         return templates.TemplateResponse(
             "dashboard.html",
             {
@@ -149,7 +148,6 @@ def dashboard(request: Request):
                 "unread_count": unread_count
             }
         )
-        
     except Exception as e:
         return _create_error_html_response(
             "Error",

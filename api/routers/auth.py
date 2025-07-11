@@ -1,36 +1,31 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
 from typing import Dict
 from ..services.auth_service import AuthService
 from ..models.auth import AuthStatus, TokenResponse, AuthError
+from ..utils import session_tokens
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
-
-# Global token storage (in production, use a proper database)
-tokens = {}
 
 def get_auth_service() -> AuthService:
     """Dependency to get auth service"""
     return AuthService()
 
-def is_authenticated() -> bool:
+def is_authenticated(request: Request) -> bool:
     """Check if user is authenticated"""
-    return "access_token" in tokens and tokens["access_token"]
+    return bool(session_tokens.get_outlook_token(request))
 
 @router.get("/login")
-def login(auth_service: AuthService = Depends(get_auth_service)):
+def login(request: Request, auth_service: AuthService = Depends(get_auth_service)):
     """Redirect to Microsoft OAuth login"""
-    if is_authenticated():
+    if is_authenticated(request):
         return RedirectResponse(url="/dashboard", status_code=302)
     
     auth_url = auth_service.get_authorization_url()
     return RedirectResponse(url=auth_url)
 
 @router.get("/callback")
-def callback(
-    code: str,
-    auth_service: AuthService = Depends(get_auth_service)
-):
+def callback(request: Request, code: str, auth_service: AuthService = Depends(get_auth_service)):
     """Handle OAuth callback"""
     try:
         token_response = auth_service.get_access_token(code)
@@ -47,7 +42,7 @@ def callback(
                 detail=f"Authentication failed: No access token received. Response: {token_response}"
             )
         
-        tokens["access_token"] = token_response["access_token"]
+        session_tokens.set_outlook_token(request, token_response["access_token"])
         
         return RedirectResponse(url="/dashboard", status_code=302)
         
@@ -57,9 +52,9 @@ def callback(
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 @router.get("/status")
-def auth_status() -> AuthStatus:
+def auth_status(request: Request) -> AuthStatus:
     """Get authentication status"""
-    if is_authenticated():
+    if is_authenticated(request):
         return AuthStatus(
             is_authenticated=True,
             message="User is authenticated"
@@ -71,17 +66,15 @@ def auth_status() -> AuthStatus:
         )
 
 @router.post("/logout")
-def logout():
+def logout(request: Request):
     """Logout user"""
-    if "access_token" in tokens:
-        del tokens["access_token"]
-    
+    session_tokens.clear_outlook_token(request)
     return {"message": "Logged out successfully"}
 
 @router.get("/token")
-def get_token() -> TokenResponse:
+def get_token(request: Request) -> TokenResponse:
     """Get current access token (for API usage)"""
-    if not is_authenticated():
+    token = session_tokens.get_outlook_token(request)
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    return TokenResponse(access_token=tokens["access_token"]) 
+    return TokenResponse(access_token=token) 
