@@ -71,6 +71,12 @@ def logout(request: Request):
     session_tokens.clear_outlook_token(request)
     return {"message": "Logged out successfully"}
 
+@router.get("/logout")
+def logout_get(request: Request):
+    """Logout user (GET version for browser links)"""
+    session_tokens.clear_outlook_token(request)
+    return RedirectResponse(url="/auth/login", status_code=302)
+
 @router.get("/token")
 def get_token(request: Request) -> TokenResponse:
     """Get current access token (for API usage)"""
