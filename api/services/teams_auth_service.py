@@ -13,9 +13,9 @@ class TeamsAuthService:
     def __init__(self):
         self.client_id = os.getenv("TEAMS_CLIENT_ID")
         self.client_secret = os.getenv("TEAMS_CLIENT_SECRET")
-        self.redirect_uri = os.getenv("TEAMS_REDIRECT_URI", "http://localhost:8000/auth/teams/callback")
-        self.scopes = os.getenv("TEAMS_SCOPES", "Chat.Read Chat.ReadWrite Channel.ReadBasic.All Team.ReadBasic.All")
-        self.tenant_id = os.getenv("TEAMS_TENANT_ID", "common")
+        self.redirect_uri = os.getenv("TEAMS_REDIRECT_URI")
+        self.scopes = os.getenv("TEAMS_SCOPES")
+        self.tenant_id = os.getenv("TEAMS_TENANT_ID")
         
         # Microsoft Graph API endpoints
         # Use tenant-specific endpoint instead of /common for single-tenant apps
