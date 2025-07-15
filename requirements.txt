@@ -7,3 +7,4 @@ google-generativeai
 jinja2
 sqlalchemy
 aiosqlite
+itsdangerous
