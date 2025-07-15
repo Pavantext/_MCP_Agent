@@ -1,14 +1,17 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
+from starlette.middleware.sessions import SessionMiddleware
 import os
+import uuid
 
 from .routers import auth, emails, chatbot, github, github_chatbot, teams, teams_chatbot
 from .services.email_service import EmailService
 from .services.ai_service import AIService
-from .routers.auth import is_authenticated, tokens
+from .services.db import get_db, get_user_by_session_id, create_or_update_user
+from api.models.user import User
+from sqlalchemy.orm import Session
 
 # Constants
 APP_TITLE = "MCP Outlook Reader API"
@@ -42,34 +45,50 @@ if os.path.exists(STATIC_DIR):
 # Templates
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+SESSION_COOKIE = "mcp_session_id"
+SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "super-secret-key-change-me")
+
+# Add session middleware
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY)
+
+def get_current_user(request: Request, db: Session):
+    session_id = request.session.get(SESSION_COOKIE)
+    if not session_id:
+        return None
+    return get_user_by_session_id(db, session_id)
+
+def require_authenticated_user(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
 @app.get("/")
-def home():
-    """Main entry point - redirects based on authentication status"""
-    if is_authenticated():
+def home(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if user:
         return RedirectResponse(url="/dashboard", status_code=302)
     else:
         return RedirectResponse(url="/auth/login", status_code=302)
 
 @app.get("/auth/github/callback")
-def github_callback(code: str):
-    """Handle GitHub OAuth callback"""
+def github_callback(request: Request, code: str, db: Session = Depends(get_db)):
     try:
         from .services.github_auth_service import GitHubAuthService
         auth_service = GitHubAuthService()
         token_response = auth_service.get_access_token(code)
-        
         if "error" in token_response:
             return _create_error_html_response(
                 "GitHub Authentication Error",
                 f"Failed to authenticate with GitHub: {token_response.get('error_description', token_response['error'])}"
             )
-        
-        # Store the token (in production, use a proper database)
-        from .routers.github import github_tokens
-        github_tokens["github_access_token"] = token_response["access_token"]
-        
-        return RedirectResponse(url="/dashboard", status_code=302)
-        
+        session_id = request.session.get(SESSION_COOKIE)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            request.session[SESSION_COOKIE] = session_id
+        create_or_update_user(db, session_id, github_access_token=token_response["access_token"])
+        response = RedirectResponse(url="/dashboard", status_code=302)
+        return response
     except Exception as e:
         return _create_error_html_response(
             "GitHub Authentication Error",
@@ -77,47 +96,39 @@ def github_callback(code: str):
         )
 
 @app.get("/auth/teams/callback")
-def teams_callback(code: str = None, error: str = None, error_description: str = None):
-    """Handle Teams OAuth callback"""
+def teams_callback(request: Request, code: str = None, error: str = None, error_description: str = None, db: Session = Depends(get_db)):
     try:
-        # Debug logging
-        print(f"Teams callback received - code: {code}, error: {error}, error_description: {error_description}")
-        
-        # Check for OAuth errors first
         if error:
             error_msg = error_description or error
-            print(f"Teams OAuth error: {error_msg}")
             return _create_error_html_response(
                 "Teams Authentication Error",
                 f"OAuth error: {error_msg}"
             )
-        
-        # Check if code is provided
         if not code:
-            print("Teams callback: No authorization code received")
             return _create_error_html_response(
                 "Teams Authentication Error",
                 "No authorization code received from Microsoft. Please try again."
             )
-        
         from .services.teams_auth_service import TeamsAuthService
         auth_service = TeamsAuthService()
         token_response = auth_service.get_access_token(code)
-        
         if "error" in token_response:
             return _create_error_html_response(
                 "Teams Authentication Error",
                 f"Failed to authenticate with Teams: {token_response.get('error_description', token_response['error'])}"
             )
-        
-        # Store the token (in production, use a proper database)
-        from .routers.teams import teams_tokens
-        teams_tokens["teams_access_token"] = token_response["access_token"]
-        if "refresh_token" in token_response:
-            teams_tokens["teams_refresh_token"] = token_response["refresh_token"]
-        
-        return RedirectResponse(url="/dashboard", status_code=302)
-        
+        session_id = request.session.get(SESSION_COOKIE)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            request.session[SESSION_COOKIE] = session_id
+        create_or_update_user(
+            db,
+            session_id,
+            teams_access_token=token_response["access_token"],
+            teams_refresh_token=token_response.get("refresh_token")
+        )
+        response = RedirectResponse(url="/dashboard", status_code=302)
+        return response
     except Exception as e:
         return _create_error_html_response(
             "Teams Authentication Error",
@@ -125,21 +136,34 @@ def teams_callback(code: str = None, error: str = None, error_description: str =
         )
 
 @app.get("/dashboard")
-def dashboard(request: Request):
-    """Main dashboard - shows email summary if authenticated"""
-    if not is_authenticated():
-        return RedirectResponse(url="/auth/login", status_code=302)
-    
+def dashboard(request: Request, db: Session = Depends(get_db)):
+    user = require_authenticated_user(request, db)
     try:
         email_service = EmailService()
         ai_service = AIService()
-        
-        emails = email_service.get_all_emails(tokens["access_token"])
+        access_token = user.outlook_access_token
+        if not access_token:
+            return HTMLResponse(
+                content=_create_error_html_response(
+                    "Error",
+                    "No Outlook access token found. Please authenticate with Outlook."
+                ).body.decode(),
+                status_code=401
+            )
+        try:
+            emails = email_service.get_all_emails(access_token)
+        except Exception as e:
+            if "401" in str(e) or "Unauthorized" in str(e):
+                return HTMLResponse(
+                    content=_create_error_html_response(
+                        "Error",
+                        "Outlook token is invalid or expired. Please re-authenticate."
+                    ).body.decode(),
+                    status_code=401
+                )
+            raise
         ai_summary = ai_service.summarize_emails(emails)
-        
-        # Count unread emails
         unread_count = sum(1 for email in emails if not email.get("isRead", True))
-        
         return templates.TemplateResponse(
             "dashboard.html",
             {
@@ -149,11 +173,13 @@ def dashboard(request: Request):
                 "unread_count": unread_count
             }
         )
-        
     except Exception as e:
-        return _create_error_html_response(
-            "Error",
-            f"Failed to load email summary: {str(e)}"
+        return HTMLResponse(
+            content=_create_error_html_response(
+                "Error",
+                f"Failed to load email summary: {str(e)}"
+            ).body.decode(),
+            status_code=500
         )
 
 @app.get("/api/docs")

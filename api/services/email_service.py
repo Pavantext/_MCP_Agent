@@ -26,11 +26,13 @@ class EmailService:
         """Make HTTP request with error handling"""
         try:
             response = requests.get(url, headers=headers, params=params)
+            if response.status_code == 401:
+                raise Exception("401 Unauthorized")
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"Error making request to {url}: {str(e)}")
-            return {"value": []}
+            raise
     
     def get_all_emails(self, access_token: str) -> List[Dict]:
         """Get all emails from Microsoft Graph API"""

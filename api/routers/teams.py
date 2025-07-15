@@ -1,77 +1,72 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List, Dict
 from ..services.teams_service import TeamsService
 from ..services.teams_auth_service import TeamsAuthService
 from ..services.ai_service import AIService
 from ..models.teams import TeamsSummary
-from .auth import is_authenticated
+from ..services.db import get_db, get_user_by_session_id, create_or_update_user
+from api.models.user import User
+from sqlalchemy.orm import Session
+import uuid
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
-# Global Teams token storage (in production, use a proper database)
-teams_tokens = {}
+SESSION_COOKIE = "mcp_session_id"
 
 def get_teams_service() -> TeamsService:
-    """Dependency to get Teams service"""
     return TeamsService()
 
 def get_teams_auth_service() -> TeamsAuthService:
-    """Dependency to get Teams auth service"""
     return TeamsAuthService()
 
 def get_ai_service() -> AIService:
-    """Dependency to get AI service"""
     return AIService()
 
-def is_teams_authenticated() -> bool:
-    """Check if user is authenticated with Teams"""
-    return "teams_access_token" in teams_tokens and teams_tokens["teams_access_token"]
+def get_current_user(request: Request, db: Session):
+    session_id = request.session.get(SESSION_COOKIE)
+    if not session_id:
+        return None
+    return get_user_by_session_id(db, session_id)
+
+def is_teams_authenticated(request: Request, db: Session) -> bool:
+    user = get_current_user(request, db)
+    return user is not None and user.teams_access_token is not None
 
 @router.get("/login")
-def teams_login(auth_service: TeamsAuthService = Depends(get_teams_auth_service)):
-    """Redirect to Teams OAuth login"""
-    if is_teams_authenticated():
+def teams_login(request: Request, auth_service: TeamsAuthService = Depends(get_teams_auth_service), db: Session = Depends(get_db)):
+    if is_teams_authenticated(request, db):
         return {"message": "Already authenticated with Teams"}
-    
     auth_url = auth_service.get_authorization_url()
     return {"auth_url": auth_url}
 
 @router.get("/callback")
-def teams_callback(
-    code: str,
-    auth_service: TeamsAuthService = Depends(get_teams_auth_service)
-):
-    """Handle Teams OAuth callback"""
+def teams_callback(request: Request, code: str, auth_service: TeamsAuthService = Depends(get_teams_auth_service), db: Session = Depends(get_db)):
     try:
         token_response = auth_service.get_access_token(code)
-        
         if "error" in token_response:
             raise HTTPException(
                 status_code=400,
                 detail=f"Teams authentication failed: {token_response.get('error_description', token_response['error'])}"
             )
-        
         if "access_token" not in token_response:
             raise HTTPException(
                 status_code=400,
                 detail=f"Teams authentication failed: No access token received. Response: {token_response}"
             )
-        
-        teams_tokens["teams_access_token"] = token_response["access_token"]
-        if "refresh_token" in token_response:
-            teams_tokens["teams_refresh_token"] = token_response["refresh_token"]
-        
+        session_id = request.session.get(SESSION_COOKIE)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            request.session[SESSION_COOKIE] = session_id
+        create_or_update_user(db, session_id, teams_access_token=token_response["access_token"], teams_refresh_token=token_response.get("refresh_token"))
         return {"message": "Teams authentication successful"}
-        
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Teams authentication failed: {str(e)}")
 
 @router.get("/status")
-def teams_auth_status():
-    """Get Teams authentication status"""
-    if is_teams_authenticated():
+def teams_auth_status(request: Request, db: Session = Depends(get_db)):
+    if is_teams_authenticated(request, db):
         return {
             "is_authenticated": True,
             "message": "User is authenticated with Teams"
@@ -83,57 +78,67 @@ def teams_auth_status():
         }
 
 @router.post("/logout")
-def teams_logout():
-    """Logout from Teams"""
-    if "teams_access_token" in teams_tokens:
-        del teams_tokens["teams_access_token"]
-    if "teams_refresh_token" in teams_tokens:
-        del teams_tokens["teams_refresh_token"]
-    
+def teams_logout(request: Request, db: Session = Depends(get_db)):
+    session_id = request.session.get(SESSION_COOKIE)
+    if session_id:
+        user = get_user_by_session_id(db, session_id)
+        if user:
+            user.teams_access_token = None
+            user.teams_refresh_token = None
+            db.commit()
     return {"message": "Teams logout successful"}
 
 @router.get("/summary")
 def get_teams_summary(
-    teams_service: TeamsService = Depends(get_teams_service)
+    request: Request,
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> TeamsSummary:
     """Get Teams summary"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        return teams_service.get_teams_summary(teams_tokens["teams_access_token"])
+        user = get_current_user(request, db)
+        return teams_service.get_teams_summary(user.teams_access_token)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get Teams summary: {str(e)}")
 
 @router.get("/teams")
 def get_teams(
-    teams_service: TeamsService = Depends(get_teams_service)
+    request: Request,
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> List[Dict]:
     """Get user's teams"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        return teams_service.get_user_teams(teams_tokens["teams_access_token"])
+        user = get_current_user(request, db)
+        return teams_service.get_user_teams(user.teams_access_token)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get teams: {str(e)}")
 
 @router.get("/channels")
 def get_teams_channels(
-    teams_service: TeamsService = Depends(get_teams_service)
+    request: Request,
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> List[Dict]:
     """Get all channels from all teams"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        teams = teams_service.get_user_teams(teams_tokens["teams_access_token"])
+        user = get_current_user(request, db)
+        teams = teams_service.get_user_teams(user.teams_access_token)
         all_channels = []
         
         for team in teams:
             try:
                 channels = teams_service.get_team_channels(
-                    teams_tokens["teams_access_token"], 
+                    user.teams_access_token, 
                     team["id"]
                 )
                 for channel in channels:
@@ -149,27 +154,30 @@ def get_teams_channels(
 
 @router.get("/messages")
 def get_teams_messages(
-    teams_service: TeamsService = Depends(get_teams_service)
+    request: Request,
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> List[Dict]:
     """Get recent messages from all teams and chats"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
+        user = get_current_user(request, db)
         # Get all teams and their messages
-        teams = teams_service.get_user_teams(teams_tokens["teams_access_token"])
+        teams = teams_service.get_user_teams(user.teams_access_token)
         all_messages = []
         
         for team in teams:
             try:
                 channels = teams_service.get_team_channels(
-                    teams_tokens["teams_access_token"], 
+                    user.teams_access_token, 
                     team["id"]
                 )
                 for channel in channels:
                     try:
                         messages = teams_service.get_channel_messages(
-                            teams_tokens["teams_access_token"], 
+                            user.teams_access_token, 
                             team["id"], 
                             channel["id"]
                         )
@@ -184,11 +192,11 @@ def get_teams_messages(
         
         # Get personal chats
         try:
-            chats = teams_service.get_chats(teams_tokens["teams_access_token"])
+            chats = teams_service.get_chats(user.teams_access_token)
             for chat in chats:
                 try:
                     chat_messages = teams_service.get_chat_messages(
-                        teams_tokens["teams_access_token"], 
+                        user.teams_access_token, 
                         chat["id"]
                     )
                     for message in chat_messages:
@@ -206,57 +214,69 @@ def get_teams_messages(
 
 @router.get("/meetings")
 def get_teams_meetings(
-    teams_service: TeamsService = Depends(get_teams_service)
+    request: Request,
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> List[Dict]:
     """Get user's meetings"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        return teams_service.get_user_meetings(teams_tokens["teams_access_token"])
+        user = get_current_user(request, db)
+        return teams_service.get_user_meetings(user.teams_access_token)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get meetings: {str(e)}")
 
 @router.get("/meetings/{meeting_id}")
 def get_meeting_details(
+    request: Request,
     meeting_id: str,
-    teams_service: TeamsService = Depends(get_teams_service)
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> Dict:
     """Get detailed information about a specific meeting"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        return teams_service.get_meeting_details(teams_tokens["teams_access_token"], meeting_id)
+        user = get_current_user(request, db)
+        return teams_service.get_meeting_details(user.teams_access_token, meeting_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get meeting details: {str(e)}")
 
 @router.get("/meetings/{meeting_id}/attendance")
 def get_meeting_attendance(
+    request: Request,
     meeting_id: str,
-    teams_service: TeamsService = Depends(get_teams_service)
+    teams_service: TeamsService = Depends(get_teams_service),
+    db: Session = Depends(get_db)
 ) -> List[Dict]:
     """Get attendance report for a meeting"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        return teams_service.get_meeting_attendance(teams_tokens["teams_access_token"], meeting_id)
+        user = get_current_user(request, db)
+        return teams_service.get_meeting_attendance(user.teams_access_token, meeting_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get meeting attendance: {str(e)}")
 
 @router.get("/ai-summary")
 def get_ai_teams_summary(
+    request: Request,
     teams_service: TeamsService = Depends(get_teams_service),
-    ai_service: AIService = Depends(get_ai_service)
+    ai_service: AIService = Depends(get_ai_service),
+    db: Session = Depends(get_db)
 ) -> Dict:
     """Get AI-powered Teams summary"""
-    if not is_teams_authenticated():
+    if not is_teams_authenticated(request, db):
         raise HTTPException(status_code=401, detail="Not authenticated with Teams")
     
     try:
-        teams_data = teams_service.get_all_teams_data(teams_tokens["teams_access_token"])
-        meetings = teams_service.get_user_meetings(teams_tokens["teams_access_token"])
+        user = get_current_user(request, db)
+        teams_data = teams_service.get_all_teams_data(user.teams_access_token)
+        meetings = teams_service.get_user_meetings(user.teams_access_token)
         teams_data["meetings"] = meetings
         teams_data["total_meetings"] = len(meetings)
         
